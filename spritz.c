@@ -27,66 +27,56 @@ ALIGNED(64) typedef struct State_ {
 #define LOW(B)  ((B) & 0xf)
 #define HIGH(B) ((B) >> 4)
 
-static void
-memzero(void *pnt, size_t len)
-{
-#ifdef _WIN32
-    SecureZeroMemory(pnt, len);
-#else
-    volatile unsigned char *pnt_ = (volatile unsigned char *) pnt;
-    size_t                     i = (size_t) 0U;
+State __xdata state;
 
-    while (i < len) {
-        pnt_[i++] = 0U;
-    }
-#endif
+#define memzero() initialize_state()
+
+static void
+initialize_state(void)
+{
+    uint8_t v = 0;
+
+    do {
+        state.s[v] = v;
+		v++;
+    } while (v != 0);
+    state.a = 0;
+    state.i = 0;
+    state.j = 0;
+    state.k = 0;
+    state.z = 0;
+    state.w = 1;
 }
 
 static void
-initialize_state(State *state)
-{
-    unsigned int v;
-
-    for (v = 0; v < N; v++) {
-        state->s[v] = (unsigned char) v;
-    }
-    state->a = 0;
-    state->i = 0;
-    state->j = 0;
-    state->k = 0;
-    state->w = 1;
-    state->z = 0;
-}
-
-static void
-update(State *state)
+update(void)
 {
     unsigned char t;
     unsigned char y;
 
-    state->i += state->w;
-    y = state->j + state->s[state->i];
-    state->j = state->k + state->s[y];
-    state->k = state->i + state->k + state->s[state->j];
-    t = state->s[state->i];
-    state->s[state->i] = state->s[state->j];
-    state->s[state->j] = t;
+    state.i += state.w;
+    y = state.j + state.s[state.i];
+    state.j = state.k + state.s[y];
+    state.k = state.i + state.k + state.s[state.j];
+    t = state.s[state.i];
+    state.s[state.i] = state.s[state.j];
+    state.s[state.j] = t;
 }
 
 static unsigned char
-output(State *state)
+output(void)
 {
-    const unsigned char y1 = state->z + state->k;
-    const unsigned char x1 = state->i + state->s[y1];
-    const unsigned char y2 = state->j + state->s[x1];
+    const unsigned char y1 = state.z + state.k;
+    const unsigned char x1 = state.i + state.s[y1];
+    const unsigned char y2 = state.j + state.s[x1];
 
-    state->z = state->s[y2];
+    state.z = state.s[y2];
 
-    return state->z;
+    return state.z;
 }
 
 static void
-crush(State *state)
+crush(void)
 {
     unsigned char v;
     unsigned char x1;
@@ -95,206 +85,153 @@ crush(State *state)
 
     for (v = 0; v < N / 2; v++) {
         y = (N - 1) - v;
-        x1 = state->s[v];
-        x2 = state->s[y];
+        x1 = state.s[v];
+        x2 = state.s[y];
         if (x1 > x2) {
-            state->s[v] = x2;
-            state->s[y] = x1;
+            state.s[v] = x2;
+            state.s[y] = x1;
         } else {
-            state->s[v] = x1;
-            state->s[y] = x2;
+            state.s[v] = x1;
+            state.s[y] = x2;
         }
     }
 }
 
 static void
-whip(State *state)
+whip(void)
 {
     const unsigned int r = N * 2;
     unsigned int       v;
 
     for (v = 0; v < r; v++) {
-        update(state);
+        update();
     }
-    state->w += 2;
+    state.w += 2;
 }
 
 static void
-shuffle(State *state)
+shuffle(void)
 {
-    whip(state);
-    crush(state);
-    whip(state);
-    crush(state);
-    whip(state);
-    state->a = 0;
+    whip();
+    crush();
+    whip();
+    crush();
+    whip();
+    state.a = 0;
+}
+
+static void shuffle_if_needed(void)
+{
+	if (state.a)
+		shuffle();
 }
 
 static void
-absorb_stop(State *state)
+absorb_stop(void)
 {
-    if (state->a == N / 2) {
-        shuffle(state);
+    if (state.a == N / 2) {
+        shuffle();
     }
-    state->a++;
+    state.a++;
 }
 
 static void
-absorb_nibble(State *state, const unsigned char x)
+absorb_nibble(const unsigned char x)
 {
     unsigned char t;
     unsigned char y;
 
-    if (state->a == N / 2) {
-        shuffle(state);
+    if (state.a == N / 2) {
+        shuffle();
     }
     y = N / 2 + x;
-    t = state->s[state->a];
-    state->s[state->a] = state->s[y];
-    state->s[y] = t;
-    state->a++;
+    t = state.s[state.a];
+    state.s[state.a] = state.s[y];
+    state.s[y] = t;
+    state.a++;
 }
 
 static void
-absorb_byte(State *state, const unsigned char b)
+absorb_byte(const unsigned char b)
 {
-    absorb_nibble(state, LOW(b));
-    absorb_nibble(state, HIGH(b));
+    absorb_nibble(LOW(b));
+    absorb_nibble(HIGH(b));
 }
 
 static void
-absorb(State *state, const unsigned char *msg, size_t length)
+absorb(const unsigned char __xdata *msg, uint8_t length)
 {
-    size_t v;
+    uint8_t v;
 
     for (v = 0; v < length; v++) {
-        absorb_byte(state, msg[v]);
+        absorb_byte(msg[v]);
     }
 }
 
 static unsigned char
-drip(State *state)
+drip(void)
 {
-    if (state->a > 0) {
-        shuffle(state);
-    }
-    update(state);
+    update();
 
-    return output(state);
+    return output();
 }
 
 static void
-squeeze(State *state, unsigned char *out, size_t outlen)
+key_setup(const unsigned char __xdata *key, uint8_t keylen)
 {
-    size_t v;
-
-    if (state->a > 0) {
-        shuffle(state);
-    }
-    for (v = 0; v < outlen; v++) {
-        out[v] = drip(state);
-    }
+    initialize_state();
+    absorb(key, keylen);
 }
 
-static void
-key_setup(State *state, const unsigned char *key, size_t keylen)
+void
+spritz_encrypt(unsigned char __xdata *msg, uint8_t msglen,
+               const unsigned char __xdata *nonce, uint8_t noncelen,
+               const unsigned char __xdata *key, uint8_t keylen)
 {
-    initialize_state(state);
-    absorb(state, key, keylen);
-}
+    uint8_t v;
 
-int
-spritz_hash(unsigned char *out, size_t outlen,
-            const unsigned char *msg, size_t msglen)
-{
-    State         state;
-    unsigned char r;
-
-    if (outlen > 255) {
-        return -1;
-    }
-    r = (unsigned char) outlen;
-    initialize_state(&state);
-    absorb(&state, msg, msglen);
-    absorb_stop(&state);
-    absorb(&state, &r, 1U);
-    squeeze(&state, out, outlen);
-    memzero(&state, sizeof state);
-
-    return 0;
-}
-
-int
-spritz_stream(unsigned char *out, size_t outlen,
-              const unsigned char *key, size_t keylen)
-{
-    State state;
-
-    initialize_state(&state);
-    absorb(&state, key, keylen);
-    squeeze(&state, out, outlen);
-    memzero(&state, sizeof state);
-
-    return 0;
-}
-
-int
-spritz_encrypt(unsigned char *out, const unsigned char *msg, size_t msglen,
-               const unsigned char *nonce, size_t noncelen,
-               const unsigned char *key, size_t keylen)
-{
-    State  state;
-    size_t v;
-
-    key_setup(&state, key, keylen);
-    absorb_stop(&state);
-    absorb(&state, nonce, noncelen);
+    key_setup(key, keylen);
+    absorb_stop();
+    absorb(nonce, noncelen);
+	shuffle_if_needed();
     for (v = 0; v < msglen; v++) {
-        out[v] = msg[v] + drip(&state);
+        msg[v] = msg[v] + drip();
     }
-    memzero(&state, sizeof state);
-
-    return 0;
+    memzero();
 }
 
-int
-spritz_decrypt(unsigned char *out, const unsigned char *c, size_t clen,
-               const unsigned char *nonce, size_t noncelen,
-               const unsigned char *key, size_t keylen)
+void
+spritz_decrypt(unsigned char __xdata *c, uint8_t clen,
+               const unsigned char __xdata *nonce, uint8_t noncelen,
+               const unsigned char __xdata *key, uint8_t keylen)
 {
-    State  state;
-    size_t v;
+    uint8_t v;
 
-    key_setup(&state, key, keylen);
-    absorb_stop(&state);
-    absorb(&state, nonce, noncelen);
+    key_setup(key, keylen);
+    absorb_stop();
+    absorb(nonce, noncelen);
+	shuffle_if_needed();
     for (v = 0; v < clen; v++) {
-        out[v] = c[v] - drip(&state);
+        c[v] = c[v] - drip();
     }
-    memzero(&state, sizeof state);
-
-    return 0;
+    memzero();
 }
 
-int
-spritz_auth(unsigned char *out, size_t outlen,
-            const unsigned char *msg, size_t msglen,
-            const unsigned char *key, size_t keylen)
+void
+spritz_auth(unsigned char __xdata *out, uint8_t outlen,
+            const unsigned char __xdata *msg, uint8_t msglen,
+            const unsigned char __xdata *key, uint8_t keylen)
 {
-    State         state;
-    unsigned char r;
 
-    if (outlen > 255) {
-        return -1;
+    key_setup(key, keylen);
+    absorb_stop();
+    absorb(msg, msglen);
+    absorb_stop();
+    absorb(&outlen, 1U);
+	shuffle_if_needed();
+    for (; outlen > 0; outlen--, out++) {
+        *out = drip();
     }
-    r = (unsigned char) outlen;
-    key_setup(&state, key, keylen);
-    absorb_stop(&state);
-    absorb(&state, msg, msglen);
-    absorb_stop(&state);
-    absorb(&state, &r, 1U);
-    squeeze(&state, out, outlen);
-    memzero(&state, sizeof state);
 
-    return 0;
+    memzero();
 }

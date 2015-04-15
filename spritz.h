@@ -2,21 +2,17 @@
 #ifndef __SPRITZ_H__
 #define __SPRITZ_H__
 
-int spritz_hash(unsigned char *out, size_t outlen,
-                const unsigned char *msg, size_t msglen);
+#include <stdint.h>
 
-int spritz_stream(unsigned char *out, size_t outlen,
-                  const unsigned char *key, size_t keylen);
+void spritz_encrypt(unsigned char __xdata *msg, uint8_t msglen,
+                   const unsigned char __xdata *nonce, uint8_t noncelen,
+                   const unsigned char __xdata *key, uint8_t keylen);
 
-int spritz_encrypt(unsigned char *out, const unsigned char *msg, size_t msglen,
-                   const unsigned char *nonce, size_t noncelen,
-                   const unsigned char *key, size_t keylen);
+void spritz_decrypt(unsigned char __xdata *c, uint8_t clen,
+                   const unsigned char __xdata *nonce, uint8_t noncelen,
+                   const unsigned char __xdata *key, uint8_t keylen);
 
-int spritz_decrypt(unsigned char *out, const unsigned char *c, size_t clen,
-                   const unsigned char *nonce, size_t noncelen,
-                   const unsigned char *key, size_t keylen);
-
-int spritz_auth(unsigned char *out, size_t outlen,
-                const unsigned char *msg, size_t msglen,
-                const unsigned char *key, size_t keylen);
+void spritz_auth(unsigned char __xdata *out, uint8_t outlen,
+                const unsigned char __xdata *msg, uint8_t msglen,
+                const unsigned char __xdata *key, uint8_t keylen);
 #endif

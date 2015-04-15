@@ -175,7 +175,7 @@ void main()
 			val = 'a';
 
 		gpio_pin_val_sbit_set(P1_SB_D6);
-		spritz_encrypt(data_in, data_in, sizeof(data_in), NULL, 0, spritz_key, sizeof(spritz_key));
+		spritz_encrypt(data_in, sizeof(data_in), NULL, 0, spritz_key, sizeof(spritz_key));
 		gpio_pin_val_sbit_clear(P1_SB_D6);
 
 		for (i = 0; i < sizeof(data_in); i++) {
